@@ -1,0 +1,20 @@
+{
+  "name": "morn-issue-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Unlicense",
+  "scripts": {
+    "check": "npm test && wrangler deploy --dry-run",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev --local",
+    "test": "node --test tests/*.test.mjs",
+    "types": "wrangler types"
+  },
+  "devDependencies": {
+    "wrangler": "^4.127.1"
+  },
+  "dependencies": {
+    "jose": "^6.2.12"
+  }
+}
