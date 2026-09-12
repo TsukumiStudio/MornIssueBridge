@@ -37,8 +37,8 @@ test('管理画面は署名・発行元・宛先・有効期限・メールを�
 
 test('投稿成功・失敗を保存し、DB障害時の重複投稿を防ぐ', async () => {
   const db = database();
-  const e = { REPORTS_DB: db, GITHUB_TOKEN: 'test', SHARED_SECRET: 'test', ALLOWED_REPOSITORIES: 'owner/repo', REPORT_LIMITER: { limit: async () => ({ success: true }) } };
-  const post = (extra = {}) => new Request('https://example.test/', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Morn-Token': 'test' }, body: JSON.stringify({ title: '<script>alert(1)</script>', body: '詳細です', reporter_id: 'player-123', reporter_name: 'テストさん', repository: 'owner/repo', ...extra }) });
+  const e = { REPORTS_DB: db, GITHUB_TOKEN: 'test', ALLOWED_REPOSITORIES: 'owner/repo', REPORT_LIMITER: { limit: async () => ({ success: true }) } };
+  const post = (extra = {}) => new Request('https://example.test/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: '<script>alert(1)</script>', body: '詳細です', reporter_id: 'player-123', reporter_name: 'テストさん', repository: 'owner/repo', ...extra }) });
   const github = async (url) => {
     assert.equal(url, 'https://api.github.com/repos/owner/repo/issues');
     const rows = (await db.prepare('SELECT * FROM reports').bind().all()).results;

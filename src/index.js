@@ -16,7 +16,7 @@ export default {
 
 /**
  * @param {Request} request
- * @param {Env & { GITHUB_TOKEN?: string, SHARED_SECRET?: string }} env
+ * @param {Env & { GITHUB_TOKEN?: string }} env
  * @param {typeof fetch} githubFetch
  */
 export async function handleRequest(request, env, githubFetch) {
@@ -33,14 +33,9 @@ export async function handleRequest(request, env, githubFetch) {
   }
 
   try {
-    if (!env.SHARED_SECRET || !env.GITHUB_TOKEN) {
+    if (!env.GITHUB_TOKEN) {
       throw new HttpError(503, "サーバーの設定が未完了です");
     }
-    const clientToken = request.headers.get("X-Morn-Token") ?? "";
-    if (!(await secretsMatch(clientToken, env.SHARED_SECRET))) {
-      throw new HttpError(401, "合言葉が違います");
-    }
-
     const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
     const { success } = await env.REPORT_LIMITER.limit({ key: ip });
     if (!success) {
@@ -257,22 +252,6 @@ async function githubRequest(githubFetch, token, path, method, body) {
   return text ? JSON.parse(text) : {};
 }
 
-/** @param {string} provided @param {string} expected */
-async function secretsMatch(provided, expected) {
-  const encoder = new TextEncoder();
-  const [providedHash, expectedHash] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
-    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
-  ]);
-  const providedBytes = new Uint8Array(providedHash);
-  const expectedBytes = new Uint8Array(expectedHash);
-  let different = 0;
-  for (let i = 0; i < providedBytes.length; i += 1) {
-    different |= providedBytes[i] ^ expectedBytes[i];
-  }
-  return different === 0;
-}
-
 /** @param {unknown} value */
 function isPngBase64(value) {
   if (typeof value !== "string" || value.length === 0 || value.length > Math.ceil(MAX_SCREENSHOT_BYTES / 3) * 4) {
@@ -315,7 +294,7 @@ function json(value, status) {
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, X-Morn-Token",
+    "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Max-Age": "86400",
   };

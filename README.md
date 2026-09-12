@@ -28,18 +28,17 @@ npx wrangler d1 create morn-issue-reports
 GitHubのfine-grained PATには、許可一覧の対象リポジトリだけを選び、`Issues: Read and write` を与えます。
 ラベルを付ける場合は、トークン所有者にも対象リポジトリで必要な権限を与えます。
 
-秘密値は対話入力で登録します。
+GitHubトークンは対話入力で登録します。
 
 ```sh
 npx wrangler secret put GITHUB_TOKEN
-npx wrangler secret put SHARED_SECRET
 npx wrangler d1 migrations apply morn-issue-reports --remote
 npm run types
 npm run check
 npm run deploy
 ```
 
-公開アプリへ埋め込んだ値は取り出せるため、許可リポジトリとGitHubトークンの権限を必要な範囲に絞ります。
+許可リポジトリとGitHubトークンの権限を必要な範囲に絞ります。
 レート制限は送信元IPごとに適用し、既定の設定は60秒あたり5回です。
 
 管理画面を使う場合は、Cloudflare Accessでデプロイ先の `/admin` 以下を保護し、`ADMIN_EMAIL` と同じメールだけを許可します。
@@ -55,8 +54,8 @@ URLは `DROP_ORIGIN + "/"` で始まる必要があります。originの末尾�
 
 ## 送信方法
 
-デプロイしたWorkerの `POST /` へ、`Content-Type: application/json` と `X-Morn-Token` を付けて送ります。
-`X-Morn-Token` には環境構築で登録した `SHARED_SECRET`、`repository` には送信先を指定します。
+デプロイしたWorkerの `POST /` へ、`Content-Type: application/json` を付けて送ります。
+`repository` に送信先を指定します。投稿APIは認証なしで受け付けます。
 
 ```json
 {
@@ -92,7 +91,6 @@ URLは `DROP_ORIGIN + "/"` で始まる必要があります。originの末尾�
 | HTTPステータス | 意味 |
 | --- | --- |
 | `400` | 必須項目の不足や不正な入力 |
-| `401` | 投稿トークンが不一致 |
 | `403` | 許可一覧にないリポジトリ |
 | `413` / `415` | 要求サイズ超過 / Content-Typeが不正 |
 | `429` | 送信頻度の制限超過 |
