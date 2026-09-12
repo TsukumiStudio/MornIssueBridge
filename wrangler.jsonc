@@ -6,11 +6,7 @@
   "preview_urls": false,
   "compatibility_date": "2026-09-01",
   "vars": {
-    "ALLOWED_REPOSITORIES": "",
-    "DROP_ORIGIN": "",
-    "ADMIN_EMAIL": "",
-    "ACCESS_TEAM_DOMAIN": "",
-    "ACCESS_AUD": ""
+    "DROP_ORIGIN": ""
   },
   "ratelimits": [
     {

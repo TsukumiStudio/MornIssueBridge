@@ -7,7 +7,6 @@ import { database } from './database.mjs';
 const ENV = {
   REPORTS_DB: database(),
   GITHUB_TOKEN: "github-token",
-  ALLOWED_REPOSITORIES: "owner/repo, team/another",
   DROP_ORIGIN: "https://drop.example.test",
   DROP: { fetch: async () => assert.fail("画像が無い報告では画像保存先へ到達してはいけない") },
   REPORT_LIMITER: { limit: async () => ({ success: true }) },
@@ -117,7 +116,7 @@ test("Cloudflareのレート制限を超えたらGitHubへ到達しない", asyn
 
 test("投稿用の認証情報なしで指定先へ起票し、送信先を履歴に保存する", async () => {
   const db = database();
-  const env = { ...ENV, REPORTS_DB: db, ALLOWED_REPOSITORIES: ' owner/repo, TEAM/ANOTHER ' };
+  const env = { ...ENV, REPORTS_DB: db };
   for (const repository of ['owner/repo', 'team/another']) {
     const response = await handleRequest(request({ repository, title: '報告', body: '詳細' }), env,
       async (url) => {
@@ -134,7 +133,7 @@ test("投稿用の認証情報なしで指定先へ起票し、送信先を履�
   ]);
 });
 
-test("リポジトリの省略・不正形式・許可外は外部通信と履歴保存の前に拒否する", async () => {
+test("リポジトリの省略・不正形式は外部通信と履歴保存の前に拒否する", async () => {
   const unused = () => assert.fail('拒否した報告を処理してはいけない');
   const env = { ...ENV, REPORTS_DB: { prepare: unused } };
   for (const repository of [undefined, null, 1, {}, '', 'repo', 'owner/repo/extra', '../repo',
@@ -142,14 +141,6 @@ test("リポジトリの省略・不正形式・許可外は外部通信と履�
     'owner/repo\nextra', 'owner/' + 'a'.repeat(101), 'a'.repeat(40) + '/repo', 'https://github.com/owner/repo']) {
     const response = await handleRequest(request({ repository, title: '報告', body: '詳細' }), env, unused);
     assert.equal(response.status, 400, `不正なrepository: ${JSON.stringify(repository)}`);
-  }
-  for (const repository of ['other/repo', 'owner/repo-extra', 'other/another']) {
-    const response = await handleRequest(request({ repository, title: '報告', body: '詳細', screenshot_png_base64: 'iVBORw0KGgo=' }), env, unused);
-    assert.equal(response.status, 403);
-  }
-  for (const allowed of [undefined, '', ' , ']) {
-    const response = await handleRequest(request({ title: '報告', body: '詳細' }), { ...env, ALLOWED_REPOSITORIES: allowed }, unused);
-    assert.equal(response.status, 503);
   }
 });
 

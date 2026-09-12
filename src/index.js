@@ -43,11 +43,6 @@ export async function handleRequest(request, env, githubFetch) {
     }
 
     const payload = await readPayload(request);
-    const allowed = (env.ALLOWED_REPOSITORIES || "").split(",").map((repo) => repo.trim().toLowerCase()).filter(Boolean);
-    if (!allowed.length) throw new HttpError(503, "許可リポジトリが未設定です");
-    if (!allowed.includes(payload.repository.toLowerCase())) {
-      throw new HttpError(403, "このリポジトリへの投稿は許可されていません");
-    }
     if (!env.REPORTS_DB) throw new HttpError(503, "履歴データベースが未設定です");
     const id = crypto.randomUUID();
     try {

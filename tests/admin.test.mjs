@@ -1,43 +1,26 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { generateKeyPair, SignJWT, exportJWK, createLocalJWKSet } from 'jose';
 import { admin, renderDashboard } from '../src/admin.js';
 import { handleRequest } from '../src/index.js';
 import { database } from './database.mjs';
 
-const { publicKey, privateKey } = await generateKeyPair('RS256');
-const keys = createLocalJWKSet({ keys: [{ ...await exportJWK(publicKey), kid: 'test', alg: 'RS256' }] });
-const ADMIN_EMAIL = 'admin@example.test';
-const env = { ADMIN_EMAIL, ACCESS_TEAM_DOMAIN: 'test.cloudflareaccess.com', ACCESS_AUD: 'admin-test', REPORTS_DB: database() };
-async function signed(overrides = {}) {
-  return new SignJWT({ email: ADMIN_EMAIL, sub: 'user', iss: 'https://test.cloudflareaccess.com', aud: 'admin-test', iat: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+60, ...overrides }).setProtectedHeader({ alg: 'RS256', kid: 'test' }).sign(privateKey);
-}
-function request(token) { return new Request('https://example.test/admin', { headers: token ? { 'Cf-Access-Jwt-Assertion': token } : {} }); }
-
-test('管理画面は署名・発行元・宛先・有効期限・メールを全て照合する', async () => {
-  assert.equal((await admin(request(await signed()), env, keys)).status, 200);
-  for (const claims of [{ email: 'other@example.com' }, { aud: 'other' }, { iss: 'https://evil.test' }, { exp: 1 }, { nbf: 9999999999 }, { exp: undefined }]) {
-    assert.equal((await admin(request(await signed(claims)), env, keys)).status, 403);
-  }
-  assert.equal((await admin(request(await signed()), { ...env, ADMIN_EMAIL: '' }, keys)).status, 403);
-  assert.equal((await admin(request(await signed({ email: 'new@example.test' })), { ...env, ADMIN_EMAIL: 'new@example.test' }, keys)).status, 200);
-  const token = await signed();
-  const parts = token.split('.');
-  parts[1] = Buffer.from(JSON.stringify({ email: ADMIN_EMAIL })).toString('base64url');
-  assert.equal((await admin(request(parts.join('.')), env, keys)).status, 403);
-  assert.equal((await admin(request(), env, keys)).status, 403);
-  assert.equal((await admin(request(token), { ...env, ACCESS_AUD: '' }, keys)).status, 403);
-  const spoofed = new Request('https://example.test/admin', { headers: { 'Cf-Access-Authenticated-User-Email': ADMIN_EMAIL } });
-  assert.equal((await admin(spoofed, env, keys)).status, 403);
-  const response = await admin(request(token), env, keys);
+test('管理画面はAccess設定なしで表示でき、HTTPメソッドとDB障害を処理します', async () => {
+  const env = { REPORTS_DB: database() };
+  const response = await handleRequest(new Request('https://example.test/admin'), env,
+    () => assert.fail('履歴の表示でGitHubへ通信してはいけません'));
+  assert.equal(response.status, 200);
   assert.equal(response.headers.get('Cache-Control'), 'no-store');
   assert.match(response.headers.get('Content-Security-Policy'), /frame-ancestors 'none'/);
-  assert.match(await response.text(), /admin@example\.test/);
+  assert.match(await response.text(), /送信履歴/);
+  assert.equal((await admin(new Request('https://example.test/admin', { method: 'POST' }), env)).status, 405);
+  assert.equal((await admin(new Request('https://example.test/admin'), {})).status, 503);
+  const broken = { prepare() { throw Error('database unavailable'); } };
+  assert.equal((await admin(new Request('https://example.test/admin'), { REPORTS_DB: broken })).status, 503);
 });
 
 test('投稿成功・失敗を保存し、DB障害時の重複投稿を防ぐ', async () => {
   const db = database();
-  const e = { REPORTS_DB: db, GITHUB_TOKEN: 'test', ALLOWED_REPOSITORIES: 'owner/repo', REPORT_LIMITER: { limit: async () => ({ success: true }) } };
+  const e = { REPORTS_DB: db, GITHUB_TOKEN: 'test', REPORT_LIMITER: { limit: async () => ({ success: true }) } };
   const post = (extra = {}) => new Request('https://example.test/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: '<script>alert(1)</script>', body: '詳細です', reporter_id: 'player-123', reporter_name: 'テストさん', repository: 'owner/repo', ...extra }) });
   const github = async (url) => {
     assert.equal(url, 'https://api.github.com/repos/owner/repo/issues');

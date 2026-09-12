@@ -15,17 +15,8 @@ npm ci
 npx wrangler d1 create morn-issue-reports
 ```
 
-作成されたD1の `database_id` を `wrangler.jsonc` の `d1_databases` に追加し、次を設定します。
-
-| 設定 | 用途 |
-| --- | --- |
-| `vars.ALLOWED_REPOSITORIES` | 許可する `owner/repo` をカンマ区切りで列挙します。例: `owner/app,team/tool`。大文字・小文字は区別せず、ワイルドカードは使いません。空なら投稿を拒否します |
-| `ratelimits[].namespace_id` | 自分のアカウントで他用途と重ならないID |
-| `vars.ADMIN_EMAIL` | 管理画面を使う人のメールアドレス |
-| `vars.ACCESS_TEAM_DOMAIN` | Cloudflare Accessのチームドメイン（`example.cloudflareaccess.com`） |
-| `vars.ACCESS_AUD` | 管理画面用AccessアプリのAudience値 |
-
-GitHubのfine-grained PATには、許可一覧の対象リポジトリだけを選び、`Issues: Read and write` を与えます。
+作成されたD1の `database_id` を `wrangler.jsonc` の `d1_databases` に追加します。
+GitHubのfine-grained PATでは、投稿先のリポジトリを選び、`Issues: Read and write` を与えます。
 ラベルを付ける場合は、トークン所有者にも対象リポジトリで必要な権限を与えます。
 
 GitHubトークンは対話入力で登録します。
@@ -38,10 +29,10 @@ npm run check
 npm run deploy
 ```
 
-許可リポジトリとGitHubトークンの権限を必要な範囲に絞ります。
 レート制限は送信元IPごとに適用し、既定の設定は60秒あたり5回です。
 
-管理画面を使う場合は、Cloudflare Accessでデプロイ先の `/admin` 以下を保護し、`ADMIN_EMAIL` と同じメールだけを許可します。
+管理画面は `/admin` です。アクセス制限が必要な場合は、[Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/)で任意に設定します。
+未設定の場合、投稿APIと送信履歴は公開されます。独自ドメインを保護する場合は、制限を迂回できる `workers.dev` 側の公開も無効にします。
 
 画像を添える場合は、`wrangler.jsonc` に保存用Workerの `DROP` service bindingを追加し、`vars.DROP_ORIGIN` に画像の公開originを設定します。
 
@@ -70,7 +61,7 @@ URLは `DROP_ORIGIN + "/"` で始まる必要があります。originの末尾�
 
 | フィールド | 必須 | 内容 |
 | --- | --- | --- |
-| `repository` | はい | `owner/repo` 形式。サーバーの許可一覧に含まれるリポジトリ |
+| `repository` | はい | `owner/repo` 形式。GitHubトークンがIssueを作成できるリポジトリ |
 | `title` | はい | 空でない題名。最大200文字、改行不可 |
 | `body` | はい | 空でないMarkdown本文。最大20,000文字 |
 | `labels` | いいえ | 最大10個、各50文字以内のラベル名 |
@@ -91,7 +82,6 @@ URLは `DROP_ORIGIN + "/"` で始まる必要があります。originの末尾�
 | HTTPステータス | 意味 |
 | --- | --- |
 | `400` | 必須項目の不足や不正な入力 |
-| `403` | 許可一覧にないリポジトリ |
 | `413` / `415` | 要求サイズ超過 / Content-Typeが不正 |
 | `429` | 送信頻度の制限超過 |
 | `502` | GitHubへの起票に失敗 |
