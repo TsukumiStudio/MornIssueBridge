@@ -104,6 +104,69 @@ test("画像の保存に失敗しても本文だけでIssueを作る", async () 
   assert.equal(response.status, 201);
 });
 
+test("詳細と画像はMornDropへ置き、Issueには要点とリンクだけを載せる", async () => {
+  for (const withImage of [true, false]) {
+    const db = database();
+    const summary = "## 何が起きたか\n\n購入すると止まる";
+    const report = "# 報告\n\n" + summary + "\n\n## 環境\n\n| OS | macOS |\n\n## 直前の出来事\n\n- 購入";
+    const uploads = [];
+    const env = { ...ENV, REPORTS_DB: db, DROP: { fetch: async (url, init) => {
+      assert.equal(url, ENV.DROP_ORIGIN);
+      assert.equal(init.method, "POST");
+      uploads.push(init);
+      if (init.headers["Content-Type"] === "image/png") {
+        assert.ok(withImage);
+        return Response.json({ url: `${url}/shot.png` }, { status: 201 });
+      }
+      assert.equal(init.headers["Content-Type"], "text/markdown; charset=utf-8");
+      assert.equal(init.body, withImage ? `![報告時の画面](${url}/shot.png)\n\n${report}` : report);
+      return Response.json({ url: `${url}/report.md` }, { status: 201 });
+    } } };
+    const response = await handleRequest(request({
+      title: "報告", body: summary, report_markdown: report,
+      ...(withImage ? { screenshot_png_base64: "iVBORw0KGgo=" } : {}),
+    }), env, async (_url, init) => {
+      assert.equal(uploads.length, withImage ? 2 : 1, "詳細を保存する前に起票している");
+      assert.deepEqual(JSON.parse(init.body), {
+        title: "報告", body: `${summary}\n\n[詳細レポート](${ENV.DROP_ORIGIN}/report.md)`, labels: [],
+      });
+      return Response.json({ html_url: "https://github.com/owner/repo/issues/9", number: 9 }, { status: 201 });
+    });
+    assert.equal(response.status, 201);
+    const rows = (await db.prepare("SELECT body, status FROM reports").bind().all()).results;
+    assert.equal(rows[0].body, report, "詳細を履歴から失っている");
+    assert.equal(rows[0].status, "created");
+  }
+});
+
+test("詳細レポートの型・空欄・長さ・制御文字を外部通信前に検査する", async () => {
+  const unused = async () => assert.fail("不正なレポートを送信してはいけない");
+  for (const report_markdown of [null, 1, {}, "", "  ", "a".repeat(20_001), "詳細\u0000"]) {
+    const response = await handleRequest(request({ title: "報告", body: "要点", report_markdown }), ENV, unused);
+    assert.equal(response.status, 400);
+  }
+});
+
+test("詳細か画像の保存に失敗したら、詳細抜きのIssueを作らない", async () => {
+  const unused = async () => assert.fail("MornDrop保存失敗後に起票してはいけない");
+  for (const withImage of [true, false]) {
+    for (const failure of ["unconfigured", "500", "invalid-url", "invalid-json"]) {
+      const env = { ...ENV, REPORTS_DB: database(), DROP: failure === "unconfigured" ? undefined : {
+        fetch: async () => failure === "500" ? new Response("failed", { status: 500 })
+          : failure === "invalid-json" ? new Response("not-json")
+          : Response.json({ url: "https://other.example.test/report.md" }),
+      } };
+      const response = await handleRequest(request({ title: "報告", body: "要点", report_markdown: "詳細を残す",
+        ...(withImage ? { screenshot_png_base64: "iVBORw0KGgo=" } : {}),
+      }), env, unused);
+      assert.equal(response.status, 503);
+      const rows = (await env.REPORTS_DB.prepare("SELECT body, status FROM reports").bind().all()).results;
+      assert.equal(rows[0].status, "failed");
+      assert.equal(rows[0].body, "詳細を残す");
+    }
+  }
+});
+
 test("Cloudflareのレート制限を超えたらGitHubへ到達しない", async () => {
   const env = { ...ENV, REPORT_LIMITER: { limit: async () => ({ success: false }) } };
   const response = await handleRequest(

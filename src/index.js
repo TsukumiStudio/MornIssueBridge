@@ -50,7 +50,7 @@ export async function handleRequest(request, env, githubFetch) {
         (id, received_at, project, reporter_id, reporter_name, title, body, status)
         VALUES (?, ?, ?, ?, ?, ?, ?, 'received')`).bind(
           id, new Date().toISOString(), payload.repository,
-          payload.reporter_id, payload.reporter_name, payload.title, payload.body,
+          payload.reporter_id, payload.reporter_name, payload.title, payload.report_markdown ?? payload.body,
         ).run();
     } catch {
       throw new HttpError(503, "報告を保存できませんでした。時間をおいて送信してください");
@@ -60,7 +60,8 @@ export async function handleRequest(request, env, githubFetch) {
       created = await createIssue(env, payload, githubFetch);
     } catch (error) {
       await env.REPORTS_DB.prepare("UPDATE reports SET status = 'failed', error = ? WHERE id = ?")
-        .bind("GitHubへの起票が失敗しました。通信切断時は作成済みの場合があります。", id).run()
+        .bind(error instanceof HttpError ? error.message
+          : "GitHubへの起票が失敗しました。通信切断時は作成済みの場合があります。", id).run()
         .catch(() => console.error(JSON.stringify({ message: '履歴の結果更新に失敗', report_id: id })));
       throw error;
     }
@@ -84,7 +85,7 @@ export async function handleRequest(request, env, githubFetch) {
 
 /**
  * @param {Request} request
- * @returns {Promise<{ repository: string, title: string, body: string, labels: string[], reporter_id: string, reporter_name: string, screenshot?: string }>}
+ * @returns {Promise<{ repository: string, title: string, body: string, labels: string[], reporter_id: string, reporter_name: string, screenshot?: string, report_markdown?: string }>}
  */
 async function readPayload(request) {
   if (!request.headers.get("Content-Type")?.toLowerCase().startsWith("application/json")) {
@@ -120,6 +121,11 @@ async function readPayload(request) {
   if (!body.trim() || body.length > MAX_BODY_LENGTH || hasUnsafeControl(body)) {
     throw new HttpError(400, "body が不正です");
   }
+  const report_markdown = raw.report_markdown;
+  if (report_markdown !== undefined && (typeof report_markdown !== "string"
+    || !report_markdown.trim() || report_markdown.length > MAX_BODY_LENGTH || hasUnsafeControl(report_markdown))) {
+    throw new HttpError(400, "report_markdown が不正です");
+  }
 
   const rawLabels = raw.labels ?? [];
   if (!Array.isArray(rawLabels) || rawLabels.length > MAX_LABELS) {
@@ -142,7 +148,9 @@ async function readPayload(request) {
     }
     reporter[field] = value.trim();
   }
-  return { repository, title, body, labels, ...reporter, ...(screenshot === undefined ? {} : { screenshot }) };
+  return { repository, title, body, labels, ...reporter,
+    ...(screenshot === undefined ? {} : { screenshot }),
+    ...(report_markdown === undefined ? {} : { report_markdown }) };
 }
 
 /** @param {Request} request @param {number} limit */
@@ -175,21 +183,35 @@ async function readBytes(request, limit) {
 
 /**
  * @param {Env & { GITHUB_TOKEN: string }} env
- * @param {{ repository: string, title: string, body: string, labels: string[], screenshot?: string }} payload
+ * @param {{ repository: string, title: string, body: string, labels: string[], screenshot?: string, report_markdown?: string }} payload
  * @param {typeof fetch} githubFetch
  */
 async function createIssue(env, payload, githubFetch) {
-  let body = payload.body;
+  let body = payload.report_markdown ?? payload.body;
   if (payload.screenshot) {
     try {
-      const imageUrl = await uploadScreenshot(env, payload.screenshot);
+      const bytes = Uint8Array.from(atob(payload.screenshot), (char) => char.charCodeAt(0));
+      const imageUrl = await uploadFile(env, bytes, "image/png");
       body = `![報告時の画面](${imageUrl})\n\n${body}`;
     } catch (error) {
       console.error(JSON.stringify({
         message: "screenshot upload failed",
         error: error instanceof Error ? error.message : String(error),
       }));
+      if (payload.report_markdown !== undefined) {
+        throw new HttpError(503, "報告の画面を保存できませんでした。時間をおいて送信してください");
+      }
       body = `（画面の保存に失敗しました）\n\n${body}`;
+    }
+  }
+  if (payload.report_markdown !== undefined) {
+    try {
+      const reportUrl = await uploadFile(env, body, "text/markdown; charset=utf-8");
+      body = `${payload.body}\n\n[詳細レポート](${reportUrl})`;
+    } catch (error) {
+      console.error(JSON.stringify({ message: "report upload failed", error: String(error) }));
+      // 詳細を欠いたIssueは作らず、クライアント側に報告一式の控えを残してもらう。
+      throw new HttpError(503, "詳細レポートを保存できませんでした。時間をおいて送信してください");
     }
   }
   return githubRequest(
@@ -201,22 +223,21 @@ async function createIssue(env, payload, githubFetch) {
   );
 }
 
-/** @param {Env & { DROP?: Fetcher }} env @param {string} base64 */
-async function uploadScreenshot(env, base64) {
-  if (!env.DROP || !env.DROP_ORIGIN) throw new Error("画像保存先が未設定です");
-  const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+/** @param {Env & { DROP?: Fetcher }} env @param {string | Uint8Array} body @param {string} contentType */
+async function uploadFile(env, body, contentType) {
+  if (!env.DROP || !env.DROP_ORIGIN) throw new Error("MornDropが未設定です");
   const response = await env.DROP.fetch(env.DROP_ORIGIN, {
     method: "POST",
-    headers: { "Content-Type": "image/png" },
-    body: bytes,
+    headers: { "Content-Type": contentType },
+    body,
   });
   const text = await response.text();
   if (!response.ok) {
-    throw new Error(`画像保存先 ${response.status}: ${text.slice(0, 200)}`);
+    throw new Error(`MornDrop ${response.status}: ${text.slice(0, 200)}`);
   }
   const uploaded = JSON.parse(text);
   if (typeof uploaded.url !== "string" || !uploaded.url.startsWith(`${env.DROP_ORIGIN}/`)) {
-    throw new Error("画像保存先の応答が不正です");
+    throw new Error("MornDropの応答が不正です");
   }
   return uploaded.url;
 }
