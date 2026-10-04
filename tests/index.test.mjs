@@ -104,7 +104,7 @@ test("画像の保存に失敗しても本文だけでIssueを作る", async () 
   assert.equal(response.status, 201);
 });
 
-test("詳細と画像はMornDropへ置き、Issueには要点とリンクだけを載せる", async () => {
+test("詳細と画像はMornDropへ置き、Issueには画面・要点・詳細リンクを載せる", async () => {
   for (const withImage of [true, false]) {
     const db = database();
     const summary = "## 何が起きたか\n\n購入すると止まる";
@@ -128,7 +128,9 @@ test("詳細と画像はMornDropへ置き、Issueには要点とリンクだけ�
     }), env, async (_url, init) => {
       assert.equal(uploads.length, withImage ? 2 : 1, "詳細を保存する前に起票している");
       assert.deepEqual(JSON.parse(init.body), {
-        title: "報告", body: `${summary}\n\n[詳細レポート](${ENV.DROP_ORIGIN}/report.md)`, labels: [],
+        title: "報告",
+        body: `${withImage ? `![報告時の画面](${ENV.DROP_ORIGIN}/shot.png)\n\n` : ""}${summary}\n\n[詳細レポート](${ENV.DROP_ORIGIN}/report.md)`,
+        labels: [],
       });
       return Response.json({ html_url: "https://github.com/owner/repo/issues/9", number: 9 }, { status: 201 });
     });

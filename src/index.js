@@ -188,11 +188,13 @@ async function readBytes(request, limit) {
  */
 async function createIssue(env, payload, githubFetch) {
   let body = payload.report_markdown ?? payload.body;
+  let image = "";
   if (payload.screenshot) {
     try {
       const bytes = Uint8Array.from(atob(payload.screenshot), (char) => char.charCodeAt(0));
       const imageUrl = await uploadFile(env, bytes, "image/png");
-      body = `![報告時の画面](${imageUrl})\n\n${body}`;
+      image = `![報告時の画面](${imageUrl})\n\n`;
+      body = `${image}${body}`;
     } catch (error) {
       console.error(JSON.stringify({
         message: "screenshot upload failed",
@@ -207,7 +209,8 @@ async function createIssue(env, payload, githubFetch) {
   if (payload.report_markdown !== undefined) {
     try {
       const reportUrl = await uploadFile(env, body, "text/markdown; charset=utf-8");
-      body = `${payload.body}\n\n[詳細レポート](${reportUrl})`;
+      // 画面はIssueを開いてすぐ見たいので、要点の上にも載せる。
+      body = `${image}${payload.body}\n\n[詳細レポート](${reportUrl})`;
     } catch (error) {
       console.error(JSON.stringify({ message: "report upload failed", error: String(error) }));
       // 詳細を欠いたIssueは作らず、クライアント側に報告一式の控えを残してもらう。

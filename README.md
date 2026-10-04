@@ -57,7 +57,7 @@ curl 'https://YOUR-WORKER.workers.dev/' \
 
 成功すると `201` とIssueのURLを返します。送信履歴は `/admin` で確認できます。
 
-GMornIssueMaker 0.6.0は、`body` に「何が起きたか」だけ、`report_markdown` にタイトル・本文・環境・ゲームの状況・直前の操作を送ります。Bridgeは画像をMornDropへ保存し、そのURLを含むMarkdownレポートもMornDropへ保存します。Issue本文は `body` と `[詳細レポート](MornDropのURL)` だけになります。これによりIssue本文を転載するWebhook通知も短くなります。
+GMornIssueMaker 0.6.0は、`body` に「何が起きたか」だけ、`report_markdown` にタイトル・本文・環境・ゲームの状況・直前の操作を送ります。Bridgeは画像をMornDropへ保存し、そのURLを含むMarkdownレポートもMornDropへ保存します。Issue本文は、画像がある場合の `![報告時の画面](画像URL)`、`body`、`[詳細レポート](MornDropのURL)` だけになります。これによりIssue本文を転載するWebhook通知も短くなります。
 
 `report_markdown` がない既存クライアントは従来の本文・画像添付を維持します。新しいGMornIssueMakerを配布する前に、このBridgeをデプロイしてください。履歴DBには詳細本文を残します。MornDropの通常ファイルは参照が30日途絶えると削除され、詳細レポートも同じ保持期間です。
 
@@ -73,7 +73,7 @@ GMornIssueMaker 0.6.0は、`body` に「何が起きたか」だけ、`report_ma
 | `repository`（必須） | `owner/repo` 形式。登録したGitHubトークンがIssueを作成できるリポジトリ |
 | `title`（必須） | 空でない題名。200文字以内、改行不可 |
 | `body`（必須） | 空でないMarkdown本文。20,000文字以内 |
-| `report_markdown` | MornDropへ保存する空でない詳細Markdown。20,000文字以内。指定時は画像もこのレポートへ載せ、Issueには本文と詳細リンクだけを残す |
+| `report_markdown` | MornDropへ保存する空でない詳細Markdown。20,000文字以内。指定時は画像もこのレポートへ載せ、Issueには画像・本文・詳細リンクだけを残す |
 | `labels` | ラベル名の配列。10個まで、各50文字以内。付与にはGitHub側の権限が必要です |
 | `reporter_id` / `reporter_name` | 送信者の自己申告値。各200文字以内、改行不可。省略時は匿名 |
 | `screenshot_png_base64` | PNGのbase64文字列。デコード後2 MiB以内、data URLの接頭辞なし |
