@@ -59,7 +59,7 @@ curl 'https://YOUR-WORKER.workers.dev/' \
 
 GMornIssueMaker 0.6.0は、`body` に「何が起きたか」だけ、`report_markdown` にタイトル・本文・環境・ゲームの状況・直前の操作を送ります。Bridgeは画像をMornDropへ保存し、そのURLを含むMarkdownレポートもMornDropへ保存します。Issue本文は、画像がある場合の `![報告時の画面](画像URL)`、`body`、`[詳細レポート](MornDropのURL)` だけになります。これによりIssue本文を転載するWebhook通知も短くなります。
 
-`report_markdown` がない既存クライアントは従来の本文・画像添付を維持します。新しいGMornIssueMakerを配布する前に、このBridgeをデプロイしてください。履歴DBには詳細本文を残します。MornDropの通常ファイルは参照が30日途絶えると削除され、詳細レポートも同じ保持期間です。
+`report_markdown` がない既存クライアントは従来の本文・画像添付を維持します。新しいGMornIssueMakerを配布する前に、このBridgeをデプロイしてください。履歴DBには詳細本文を残します。MornDropのファイルは参照が7日途絶えると削除され、詳細レポートも同じ保持期間です。
 
 ```json
 {"html_url":"https://github.com/owner/repo/issues/123","number":123}
